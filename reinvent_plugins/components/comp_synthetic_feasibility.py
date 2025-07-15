@@ -4,13 +4,14 @@ from __future__ import annotations
 
 __all__ = ["SyntheticFeasibility"]
 from typing import List
-import requests
+
 import numpy as np
+import requests
 from pydantic.dataclasses import dataclass
 
-from .component_results import ComponentResults
-from .add_tag import add_tag
 from ..normalize import normalize_smiles
+from .add_tag import add_tag
+from .component_results import ComponentResults
 
 
 @add_tag("__parameters")
@@ -24,9 +25,9 @@ class Parameters:
     endpoint.
     """
 
-    server_url: List[str] = None
-    server_port: List[int] = None
-    server_endpoint: List[str] = None
+    server_url: List[str] = []
+    server_port: List[int] = []
+    server_endpoint: List[str] = []
 
 
 DEFAULT_SERVER_URL = "http://localhost"
@@ -40,7 +41,7 @@ class SyntheticFeasibility:
         self.server_urls = params.server_url or [DEFAULT_SERVER_URL]
         self.server_ports = params.server_port or [DEFAULT_SERVER_PORT]
         self.server_endpoints = params.server_endpoint or [DEFAULT_SERVER_ENDPOINT]
-        
+
         # needed in the normalize_smiles decorator
         self.smiles_type = "rdkit_smiles"
 
@@ -57,15 +58,15 @@ class SyntheticFeasibility:
         ):
             full_url = f"{url}:{port}/{endpoint}"
             json_data = {"smiles": smilies}
-            
+
             try:
                 response = requests.post(
-                    full_url, 
+                    full_url,
                     json=json_data,
                     headers={"Content-Type": "application/json"},
-                    timeout=30
+                    timeout=30,
                 )
-                
+
                 if response.status_code != 200:
                     raise ValueError(
                         f"Synthetic feasibility API failed.\n"
@@ -74,11 +75,11 @@ class SyntheticFeasibility:
                         f"Response content: {response.content}\n"
                         f"Response text: {response.text}"
                     )
-                
+
                 response_json = response.json()
                 results = self._parse_response(response_json, len(smilies))
                 scores.append(results)
-                
+
             except requests.exceptions.RequestException:
                 # If the request fails, return NaN for all molecules
                 results = np.full(len(smilies), np.nan, dtype=np.float32)
@@ -88,7 +89,7 @@ class SyntheticFeasibility:
 
     def _parse_response(self, response_json: List[dict], data_size: int) -> np.ndarray:
         """Parse the response from the synthetic feasibility API
-        
+
         Expected response format:
         [
             {"smiles": "C1=CC=CC=C1", "prediction": 0.5760770598287769},
@@ -97,11 +98,11 @@ class SyntheticFeasibility:
         ]
         """
         results = np.full(data_size, np.nan, dtype=np.float32)
-        
+
         # The response should be a list of dictionaries
         if not isinstance(response_json, list):
             return results
-            
+
         # Fill in the results based on the response order
         # The API should return results in the same order as the input
         for i, result in enumerate(response_json):
@@ -113,5 +114,5 @@ class SyntheticFeasibility:
                     results[i] = float(prediction)
             except (ValueError, TypeError, KeyError):
                 pass  # Keep NaN for failed predictions
-        
+
         return results
